@@ -1,5 +1,6 @@
 import numpy as np
 
+from app.config import settings
 from app.schemas.common import IssueCode
 from app.services import quality
 
@@ -81,3 +82,54 @@ def test_bad_pose_is_soft_and_does_not_block(make_face):
     result = quality.analyze(img, faces=[face])
     assert IssueCode.BAD_POSE in {i.code for i in result.issues}
     assert result.ok is True
+
+
+def test_bad_pose_blocks_when_globally_enabled(make_face, monkeypatch):
+    monkeypatch.setattr(settings, "face_pose_blocking", True)
+    img = _random_image()
+    face = make_face([50, 50, 350, 350], det_score=0.95, pose=[0.0, 60.0, 0.0])
+    result = quality.analyze(img, faces=[face])
+    assert IssueCode.BAD_POSE in {i.code for i in result.issues}
+    assert result.ok is False
+
+
+def test_bad_pose_blocks_when_request_supplies_max_yaw(make_face):
+    img = _random_image()
+    face = make_face([50, 50, 350, 350], det_score=0.95, pose=[0.0, 40.0, 0.0])
+    result = quality.analyze(img, faces=[face], max_yaw=20)
+    assert IssueCode.BAD_POSE in {i.code for i in result.issues}
+    assert result.ok is False
+
+
+def test_bad_pose_request_override_can_be_looser_than_global(make_face, monkeypatch):
+    monkeypatch.setattr(settings, "face_pose_blocking", True)
+    img = _random_image()
+    # el default global (35°) hubiera bloqueado yaw=40, pero este request pide 60°
+    face = make_face([50, 50, 350, 350], det_score=0.95, pose=[0.0, 40.0, 0.0])
+    result = quality.analyze(img, faces=[face], max_yaw=60)
+    assert result.ok is True
+    assert result.issues == []
+
+
+def test_pitch_and_roll_disabled_by_default(make_face):
+    img = _random_image()
+    face = make_face([50, 50, 350, 350], det_score=0.95, pose=[80.0, 0.0, 80.0])
+    result = quality.analyze(img, faces=[face])
+    assert result.ok is True
+    assert result.issues == []
+
+
+def test_max_pitch_blocks_when_requested(make_face):
+    img = _random_image()
+    face = make_face([50, 50, 350, 350], det_score=0.95, pose=[50.0, 0.0, 0.0])
+    result = quality.analyze(img, faces=[face], max_pitch=20)
+    assert IssueCode.BAD_POSE in {i.code for i in result.issues}
+    assert result.ok is False
+
+
+def test_max_roll_blocks_when_requested(make_face):
+    img = _random_image()
+    face = make_face([50, 50, 350, 350], det_score=0.95, pose=[0.0, 0.0, 50.0])
+    result = quality.analyze(img, faces=[face], max_roll=20)
+    assert IssueCode.BAD_POSE in {i.code for i in result.issues}
+    assert result.ok is False

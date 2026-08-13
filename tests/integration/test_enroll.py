@@ -68,6 +68,68 @@ def test_enroll_invalid_image_400(client, fake_analyzer):
     assert resp.status_code == 400
 
 
-def test_enroll_missing_image_field_400(client):
+def test_enroll_missing_image_field_422(client):
     resp = client.post("/v1/enroll", headers={"X-API-Key": "test-key"}, json={})
-    assert resp.status_code == 400
+    assert resp.status_code == 422
+
+
+def test_enroll_multipart_max_yaw_blocks(client, fake_analyzer, make_face):
+    fake_analyzer.next_faces = [make_face([50, 50, 350, 350], det_score=0.95, pose=[0.0, 40.0, 0.0])]
+    resp = client.post(
+        "/v1/enroll",
+        headers={"X-API-Key": "test-key"},
+        files={"image": ("photo.jpg", _jpeg_bytes(), "image/jpeg")},
+        data={"max_yaw": "10"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is False
+    assert body["issues"][0]["code"] == "bad_pose"
+
+
+def test_enroll_json_max_yaw_blocks(client, fake_analyzer, make_face):
+    fake_analyzer.next_faces = [make_face([50, 50, 350, 350], det_score=0.95, pose=[0.0, 40.0, 0.0])]
+    encoded = base64.b64encode(_jpeg_bytes()).decode("ascii")
+    resp = client.post(
+        "/v1/enroll",
+        headers={"X-API-Key": "test-key"},
+        json={"image": encoded, "max_yaw": 10},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is False
+    assert body["issues"][0]["code"] == "bad_pose"
+
+
+def test_enroll_default_does_not_block_on_moderate_yaw(client, fake_analyzer, make_face):
+    # sin max_yaw en el request, sigue siendo el comportamiento no-bloqueante de siempre
+    fake_analyzer.next_faces = [make_face([50, 50, 350, 350], det_score=0.95, pose=[0.0, 40.0, 0.0])]
+    resp = client.post(
+        "/v1/enroll",
+        headers={"X-API-Key": "test-key"},
+        files={"image": ("photo.jpg", _jpeg_bytes(), "image/jpeg")},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["issues"][0]["code"] == "bad_pose"
+
+
+def test_enroll_invalid_max_yaw_multipart_422(client, fake_analyzer):
+    resp = client.post(
+        "/v1/enroll",
+        headers={"X-API-Key": "test-key"},
+        files={"image": ("photo.jpg", _jpeg_bytes(), "image/jpeg")},
+        data={"max_yaw": "not-a-number"},
+    )
+    assert resp.status_code == 422
+
+
+def test_enroll_max_yaw_out_of_range_json_422(client, fake_analyzer):
+    encoded = base64.b64encode(_jpeg_bytes()).decode("ascii")
+    resp = client.post(
+        "/v1/enroll",
+        headers={"X-API-Key": "test-key"},
+        json={"image": encoded, "max_yaw": 999},
+    )
+    assert resp.status_code == 422

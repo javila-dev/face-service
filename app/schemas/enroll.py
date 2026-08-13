@@ -5,6 +5,19 @@ from pydantic import BaseModel, Field
 from app.schemas.common import Issue
 
 
+class EnrollImageInput(BaseModel):
+    image: str = Field(..., description="Imagen en base64 crudo o data-URL (data:image/jpeg;base64,...).")
+    max_yaw: Optional[float] = Field(
+        None, ge=0, le=90, description="Límite de yaw (giro) en grados para esta request. Mandarlo hace que bad_pose bloquee ok."
+    )
+    max_pitch: Optional[float] = Field(
+        None, ge=0, le=90, description="Límite de pitch (inclinación vertical) en grados para esta request."
+    )
+    max_roll: Optional[float] = Field(
+        None, ge=0, le=90, description="Límite de roll (inclinación lateral) en grados para esta request."
+    )
+
+
 class EnrollResponse(BaseModel):
     ok: bool
     embedding: Optional[List[float]] = Field(

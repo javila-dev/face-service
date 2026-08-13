@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -21,8 +21,16 @@ class Settings(BaseSettings):
     face_min_resolution: int = 200
     face_models_root: str = "/app/models"
 
+    # Pose: yaw siempre se chequea (mismo comportamiento que antes de que esto
+    # fuera configurable). Pitch/roll quedan apagados por default para no
+    # introducir issues nuevos en apps que no piden nada de esto.
+    face_pose_blocking: bool = False
+    face_max_yaw: float = 35.0
+    face_max_pitch: Optional[float] = None
+    face_max_roll: Optional[float] = None
+
     port: int = 8000
-    app_version: str = "1.0.0"
+    app_version: str = "1.1.0"
 
     @property
     def api_keys(self) -> set[str]:

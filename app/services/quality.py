@@ -7,9 +7,10 @@ import numpy as np
 from app.config import settings
 from app.schemas.common import Issue, IssueCode, make_issue
 
-# Códigos que efectivamente bloquean ok=true. bad_pose queda fuera a propósito:
-# no todos los paquetes de InsightFace exponen pose de forma confiable, así que
-# se reporta como señal adicional pero nunca tumba la respuesta por sí sola.
+# Códigos que siempre bloquean ok=true. bad_pose se agrega dinámicamente en
+# analyze() solo cuando el chequeo de pose está en modo estricto (ver
+# strict_pose más abajo) — por default queda fuera porque no todos los
+# paquetes de InsightFace exponen pose de forma confiable.
 _BLOCKING_CODES = {
     IssueCode.NO_FACE,
     IssueCode.MULTIPLE_FACES,
@@ -38,7 +39,14 @@ def _empty_result(issues: List[Issue]) -> QualityResult:
     return QualityResult(False, None, 0.0, 0.0, 0.0, 0.0, issues)
 
 
-def analyze(img: np.ndarray, faces: list) -> QualityResult:
+def analyze(
+    img: np.ndarray,
+    faces: list,
+    *,
+    max_yaw: Optional[float] = None,
+    max_pitch: Optional[float] = None,
+    max_roll: Optional[float] = None,
+) -> QualityResult:
     h, w = img.shape[:2]
 
     if min(h, w) < settings.face_min_resolution:
@@ -82,16 +90,36 @@ def analyze(img: np.ndarray, faces: list) -> QualityResult:
     elif brightness > settings.face_max_brightness:
         issues.append(make_issue(IssueCode.TOO_BRIGHT))
 
+    eff_max_yaw = max_yaw if max_yaw is not None else settings.face_max_yaw
+    eff_max_pitch = max_pitch if max_pitch is not None else settings.face_max_pitch
+    eff_max_roll = max_roll if max_roll is not None else settings.face_max_roll
+
     pose = getattr(face, "pose", None)
     if pose is not None:
         try:
-            yaw = float(pose[1])
+            p_pitch, p_yaw, p_roll = float(pose[0]), float(pose[1]), float(pose[2])
         except (TypeError, IndexError, ValueError):
-            yaw = None
-        if yaw is not None and abs(yaw) > 35:
-            issues.append(make_issue(IssueCode.BAD_POSE))
+            p_pitch = p_yaw = p_roll = None
 
-    ok = not any(issue.code in _BLOCKING_CODES for issue in issues)
+        if p_yaw is not None:
+            exceeded = []
+            if eff_max_yaw is not None and abs(p_yaw) > eff_max_yaw:
+                exceeded.append(f"yaw={p_yaw:.1f}°>{eff_max_yaw:.1f}°")
+            if eff_max_pitch is not None and abs(p_pitch) > eff_max_pitch:
+                exceeded.append(f"pitch={p_pitch:.1f}°>{eff_max_pitch:.1f}°")
+            if eff_max_roll is not None and abs(p_roll) > eff_max_roll:
+                exceeded.append(f"roll={p_roll:.1f}°>{eff_max_roll:.1f}°")
+            if exceeded:
+                issues.append(make_issue(
+                    IssueCode.BAD_POSE,
+                    "El ángulo del rostro no es adecuado (" + ", ".join(exceeded) + ").",
+                ))
+
+    strict_pose = settings.face_pose_blocking or any(
+        v is not None for v in (max_yaw, max_pitch, max_roll)
+    )
+    blocking_codes = _BLOCKING_CODES | ({IssueCode.BAD_POSE} if strict_pose else set())
+    ok = not any(issue.code in blocking_codes for issue in issues)
     return QualityResult(
         ok=ok,
         face=face if ok else None,

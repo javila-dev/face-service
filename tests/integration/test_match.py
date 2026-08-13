@@ -87,3 +87,60 @@ def test_match_missing_auth_401(client):
         data={"embedding": json.dumps(_one_hot(0).tolist())},
     )
     assert resp.status_code == 401
+
+
+def test_match_multipart_max_yaw_blocks(client, fake_analyzer, make_face):
+    emb = _one_hot(0)
+    fake_analyzer.next_faces = [
+        make_face([50, 50, 350, 350], det_score=0.95, embedding=emb, pose=[0.0, 40.0, 0.0])
+    ]
+    resp = client.post(
+        "/v1/match",
+        headers={"X-API-Key": "test-key"},
+        files={"image": ("live.jpg", _jpeg_bytes(), "image/jpeg")},
+        data={"embedding": json.dumps(emb.tolist()), "max_yaw": "10"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is False
+    assert body["issues"][0]["code"] == "bad_pose"
+    assert body["match_score"] is None
+
+
+def test_match_json_max_yaw_blocks(client, fake_analyzer, make_face):
+    emb = _one_hot(0)
+    fake_analyzer.next_faces = [
+        make_face([50, 50, 350, 350], det_score=0.95, embedding=emb, pose=[0.0, 40.0, 0.0])
+    ]
+    encoded = base64.b64encode(_jpeg_bytes()).decode("ascii")
+    resp = client.post(
+        "/v1/match",
+        headers={"X-API-Key": "test-key"},
+        json={"image": encoded, "embedding": emb.tolist(), "max_yaw": 10},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is False
+    assert body["issues"][0]["code"] == "bad_pose"
+
+
+def test_match_json_malformed_embedding_returns_422_not_500(client, fake_analyzer, make_face):
+    fake_analyzer.next_faces = [make_face([50, 50, 350, 350], det_score=0.95)]
+    encoded = base64.b64encode(_jpeg_bytes()).decode("ascii")
+    resp = client.post(
+        "/v1/match",
+        headers={"X-API-Key": "test-key"},
+        json={"image": encoded, "embedding": "not-a-list"},
+    )
+    assert resp.status_code == 422
+
+
+def test_match_multipart_invalid_threshold_422(client, fake_analyzer, make_face):
+    fake_analyzer.next_faces = [make_face([50, 50, 350, 350], det_score=0.95)]
+    resp = client.post(
+        "/v1/match",
+        headers={"X-API-Key": "test-key"},
+        files={"image": ("live.jpg", _jpeg_bytes(), "image/jpeg")},
+        data={"embedding": json.dumps(_one_hot(0).tolist()), "threshold": "not-a-number"},
+    )
+    assert resp.status_code == 422

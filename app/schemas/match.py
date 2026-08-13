@@ -14,6 +14,15 @@ class MatchImageInput(BaseModel):
         le=1.0,
         description="Umbral opcional de esta request. Si se omite se usa FACE_MATCH_THRESHOLD.",
     )
+    max_yaw: Optional[float] = Field(
+        None, ge=0, le=90, description="Límite de yaw (giro) en grados para esta request. Mandarlo hace que bad_pose bloquee ok."
+    )
+    max_pitch: Optional[float] = Field(
+        None, ge=0, le=90, description="Límite de pitch (inclinación vertical) en grados para esta request."
+    )
+    max_roll: Optional[float] = Field(
+        None, ge=0, le=90, description="Límite de roll (inclinación lateral) en grados para esta request."
+    )
 
 
 class MatchResponse(BaseModel):

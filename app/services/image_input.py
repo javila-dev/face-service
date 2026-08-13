@@ -1,9 +1,10 @@
 import base64
 import re
+from typing import Optional
 
 import cv2
 import numpy as np
-from fastapi import Request, UploadFile
+from fastapi import HTTPException, UploadFile
 
 from app.config import settings
 from app.core.errors import InvalidImageError
@@ -53,25 +54,26 @@ def decode_from_bytes(raw: bytes) -> np.ndarray:
     return img
 
 
-async def extract_image_bytes(request: Request, field_name: str = "image") -> bytes:
-    """Funnel único: acepta multipart/form-data o JSON con base64/data-URL y devuelve bytes crudos."""
-    content_type = request.headers.get("content-type", "")
+def parse_optional_float(
+    value,
+    field_name: str,
+    *,
+    ge: Optional[float] = None,
+    le: Optional[float] = None,
+) -> Optional[float]:
+    """Castea un campo de multipart/form-data (string) a float opcional, con validación de rango.
 
-    if content_type.startswith("multipart/form-data"):
-        form = await request.form()
-        upload = form.get(field_name)
-        if upload is None or not hasattr(upload, "read"):
-            raise InvalidImageError(
-                IssueCode.INVALID_IMAGE, f"Falta el campo '{field_name}' en el form-data."
-            )
-        return await bytes_from_upload(upload)
-
+    Usado para campos que en JSON ya vienen tipados por pydantic (max_yaw, threshold, ...)
+    pero que en multipart llegan siempre como string.
+    """
+    if value in (None, ""):
+        return None
     try:
-        body = await request.json()
-    except Exception as exc:
-        raise InvalidImageError(IssueCode.INVALID_IMAGE, "El body no es JSON válido.") from exc
-
-    image_value = body.get(field_name) if isinstance(body, dict) else None
-    if not image_value:
-        raise InvalidImageError(IssueCode.INVALID_IMAGE, f"Falta el campo '{field_name}' en el body JSON.")
-    return bytes_from_base64_or_data_url(image_value)
+        parsed = float(value)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail=f"El campo '{field_name}' debe ser numérico.")
+    if ge is not None and parsed < ge:
+        raise HTTPException(status_code=422, detail=f"El campo '{field_name}' debe ser >= {ge}.")
+    if le is not None and parsed > le:
+        raise HTTPException(status_code=422, detail=f"El campo '{field_name}' debe ser <= {le}.")
+    return parsed

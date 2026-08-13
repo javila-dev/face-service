@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError as PydanticValidationError
 
 from app.config import settings
 from app.core.errors import EmbeddingError, InvalidImageError, ModelNotReadyError
@@ -44,3 +45,11 @@ async def embedding_error_handler(request: Request, exc: EmbeddingError):
 @app.exception_handler(ModelNotReadyError)
 async def model_not_ready_handler(request: Request, exc: ModelNotReadyError):
     return JSONResponse(status_code=503, content={"detail": exc.message})
+
+
+@app.exception_handler(PydanticValidationError)
+async def pydantic_validation_handler(request: Request, exc: PydanticValidationError):
+    return JSONResponse(
+        status_code=422,
+        content={"detail": "Datos de entrada inválidos.", "errors": exc.errors()},
+    )

@@ -61,14 +61,14 @@ Documentación interactiva autogenerada en `/docs` (Swagger UI) y `/redoc`.
 Sin autenticación (para liveness/readiness checks de infraestructura).
 
 ```json
-{"status": "ok", "model": "buffalo_l", "version": "1.0.0", "backend": "insightface"}
+{"status": "ok", "model": "buffalo_l", "version": "1.1.0", "backend": "insightface"}
 ```
 
 `status` es `"not_ready"` (HTTP 503) mientras el modelo todavía no cargó o si la carga falló.
 
 ### `POST /v1/enroll`
 
-Requiere `X-API-Key`. Body: `multipart/form-data` con campo `image`, **o** JSON `{"image": "<base64 o data-URL>"}`.
+Requiere `X-API-Key`. Body: `multipart/form-data` con campo `image` (+ `max_yaw`/`max_pitch`/`max_roll` opcionales), **o** JSON `{"image": "<base64 o data-URL>", "max_yaw": ..., "max_pitch": ..., "max_roll": ...}`.
 
 Respuesta (siempre HTTP 200 salvo imagen realmente inválida/ilegible → 400):
 
@@ -88,7 +88,7 @@ Si la calidad no pasa, `ok: false`, `embedding` es `null` y `issues` trae el/los
 
 ### `POST /v1/match`
 
-Requiere `X-API-Key`. Body: `multipart/form-data` con `image` + `embedding` (JSON-string de 512 floats) + `threshold` opcional, **o** JSON `{"image", "embedding", "threshold"}`.
+Requiere `X-API-Key`. Body: `multipart/form-data` con `image` + `embedding` (JSON-string de 512 floats) + `threshold`/`max_yaw`/`max_pitch`/`max_roll` opcionales, **o** JSON `{"image", "embedding", "threshold", "max_yaw", "max_pitch", "max_roll"}`.
 
 ```json
 {
@@ -104,7 +104,23 @@ Requiere `X-API-Key`. Body: `multipart/form-data` con `image` + `embedding` (JSO
 
 El servicio decide `match_passed` comparando la similitud coseno (`match_score`, en `[-1, 1]`) contra `threshold` (o `FACE_MATCH_THRESHOLD` si no se envía). La app cliente no necesita reimplementar esa decisión.
 
-Si la foto en vivo no pasa calidad (incluye más de un rostro detectado), `ok: false` con `issues` y sin `match_score`/`match_passed`.
+Si la foto en vivo no pasa calidad (incluye más de un rostro detectado o pose fuera de límite en modo estricto), `ok: false` con `issues` y sin `match_score`/`match_passed`.
+
+### Límites de pose (`max_yaw` / `max_pitch` / `max_roll`)
+
+Disponibles en `/v1/enroll` y `/v1/match`, en grados (0-90). Por default (`FACE_POSE_BLOCKING=false` y sin mandar estos campos) el chequeo de pose se comporta **exactamente igual que antes**: solo yaw se evalúa contra `FACE_MAX_YAW` (35° por default) y nunca bloquea `ok`, solo aparece como aviso en `issues`.
+
+Si un request manda **cualquiera** de los tres campos, ese request pasa a modo estricto: `bad_pose` bloquea `ok` para esa llamada puntual, usando el valor que mandaste para los ejes que especificaste y los defaults del servicio (`FACE_MAX_YAW`/`FACE_MAX_PITCH`/`FACE_MAX_ROLL`) para los que no. Esto te deja calibrar y activar el bloqueo **por app**, sin tocar la configuración compartida del servicio (que afectaría a todos los demás consumidores). El eje que no te importa, simplemente no lo mandás.
+
+```bash
+curl -X POST https://face.2asoft.tech/v1/match \
+  -H "X-API-Key: <key>" \
+  -F "image=@foto_en_vivo.jpg" \
+  -F 'embedding=[0.01, -0.02, ...]' \
+  -F "max_yaw=15"
+```
+
+`FACE_POSE_BLOCKING=true` hace lo mismo pero global, para requests que no mandan nada — pensado para un deploy dedicado a una sola app, no para esta instancia compartida.
 
 ## 4. Authentication
 
@@ -131,8 +147,12 @@ Sin key válida → HTTP 401. `/health` es la única excepción, queda público.
 | `FACE_MAX_IMAGE_MB` | `10.0` | Tamaño máximo de imagen aceptado. |
 | `FACE_MIN_RESOLUTION` | `200` | Resolución mínima (px, en cualquier eje). |
 | `FACE_MODELS_ROOT` | `/app/models` | Dónde vive el modelo horneado en la imagen. |
+| `FACE_POSE_BLOCKING` | `false` | Si `true`, `bad_pose` bloquea `ok` por default para requests que no mandan sus propios límites. Ver [Límites de pose](#límites-de-pose-max_yaw--max_pitch--max_roll). |
+| `FACE_MAX_YAW` | `35.0` | Límite de yaw (giro) en grados. Siempre se chequea (informativo salvo modo estricto). |
+| `FACE_MAX_PITCH` | *(sin chequear)* | Límite de pitch (inclinación vertical) en grados. `None` = no se evalúa salvo que el request lo pida. |
+| `FACE_MAX_ROLL` | *(sin chequear)* | Límite de roll (inclinación lateral) en grados. `None` = no se evalúa salvo que el request lo pida. |
 | `PORT` | `8000` | Puerto del servidor. |
-| `APP_VERSION` | `1.0.0` | Se refleja en `/health`. |
+| `APP_VERSION` | `1.1.0` | Se refleja en `/health`. |
 
 Todos los umbrales de calidad son ajustables sin tocar código — cada app cliente/cámara puede necesitar valores distintos.
 
@@ -177,11 +197,19 @@ docker build --build-arg FACE_MODEL_NAME=buffalo_s -t face-recognition-service:b
 | `blurry` | Varianza del laplaciano por debajo de `FACE_MIN_LAPLACIAN_VAR`. |
 | `too_dark` / `too_bright` | Brillo fuera de `[FACE_MIN_BRIGHTNESS, FACE_MAX_BRIGHTNESS]`. |
 | `low_resolution` | La imagen es más chica que `FACE_MIN_RESOLUTION`. |
-| `bad_pose` | Ángulo (yaw) extremo. **No bloquea** `ok`, es señal adicional best-effort (no todos los paquetes de InsightFace exponen pose de forma confiable). |
+| `bad_pose` | Ángulo (yaw/pitch/roll) fuera de límite. Bloquea `ok` solo en modo estricto — request con `max_yaw`/`max_pitch`/`max_roll`, o `FACE_POSE_BLOCKING=true`. Por default es informativo (no todos los paquetes de InsightFace exponen pose de forma confiable). |
 | `invalid_image` | La imagen no se pudo decodificar, o falta el campo `image`. |
 | `image_too_large` | Supera `FACE_MAX_IMAGE_MB`. |
 | `unsupported_format` | Reservado para formatos no soportados. |
 | `embedding_dimension_mismatch` | El embedding recibido en `/v1/match` no tiene 512 dimensiones o no es una lista numérica válida. |
+
+### Comportamiento esperado en `/v1/match`
+
+| Caso | Respuesta |
+|---|---|
+| Foto mala (borrosa, sin cara, varias caras, o pose fuera de límite en modo estricto) | `ok: false` + `issues` con el/los código(s) del motivo. Sin `match_score`/`match_passed`. |
+| Foto buena + misma persona | `ok: true`, `match_passed: true`. |
+| Foto buena + persona distinta | `ok: true`, `match_passed: false` — la calidad estuvo bien, la señal de fallo es `match_passed: false`, **no** un issue nuevo (no existe un código `identity_mismatch`, es intencional). |
 
 ## 11. Testing
 
