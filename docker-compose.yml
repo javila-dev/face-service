@@ -1,0 +1,31 @@
+services:
+  face-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        FACE_MODEL_NAME: ${FACE_MODEL_NAME:-buffalo_l}
+    restart: unless-stopped
+    environment:
+      FACE_API_KEYS: ${FACE_API_KEYS}
+      FACE_MODEL_NAME: ${FACE_MODEL_NAME:-buffalo_l}
+      FACE_PROVIDERS: ${FACE_PROVIDERS:-cpu}
+      FACE_MATCH_THRESHOLD: ${FACE_MATCH_THRESHOLD:-0.40}
+      FACE_MIN_DET_SCORE: ${FACE_MIN_DET_SCORE:-0.50}
+      FACE_MIN_FACE_RATIO: ${FACE_MIN_FACE_RATIO:-5.0}
+      FACE_MIN_LAPLACIAN_VAR: ${FACE_MIN_LAPLACIAN_VAR:-50.0}
+      FACE_MIN_BRIGHTNESS: ${FACE_MIN_BRIGHTNESS:-40.0}
+      FACE_MAX_BRIGHTNESS: ${FACE_MAX_BRIGHTNESS:-220.0}
+      FACE_MAX_IMAGE_MB: ${FACE_MAX_IMAGE_MB:-10.0}
+      FACE_MIN_RESOLUTION: ${FACE_MIN_RESOLUTION:-200}
+      PORT: ${PORT:-8000}
+    ports:
+      - "${PORT:-8000}:8000"
+    mem_limit: 3g
+    cpus: "2.0"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as r; r.urlopen('http://localhost:8000/health').status"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

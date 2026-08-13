@@ -14,6 +14,15 @@ Cada app cliente decide dónde guardar el embedding devuelto por `/v1/enroll` �
 
 ## 2. Quick start
 
+Con `docker compose` (recomendado para desarrollo local):
+
+```bash
+cp .env.example .env   # editar FACE_API_KEYS al menos
+docker compose up --build
+```
+
+O con `docker` directo:
+
 ```bash
 docker build -t face-recognition-service .
 docker run -d --name face-service -p 8000:8000 \
@@ -173,6 +182,14 @@ pytest
 
 Todos los tests (unitarios e integración) corren con el modelo de InsightFace **mockeado** — no descargan ni cargan el modelo real, corren en segundos. Para un smoke test end-to-end con el modelo real, hay que levantar el contenedor y pegarle a `/v1/enroll` / `/v1/match` con fotos reales (no forma parte de la suite automática por el costo de cargar el modelo).
 
-## 12. Nota sobre CliniQ
+## 12. Deploy en Dokploy
+
+`docker-compose.yml` no tiene nada de Traefik ni de redes/labels — eso lo resuelve Dokploy solo:
+
+1. Crear la app como "Docker Compose", apuntando a este repo.
+2. Cargar las env vars (`FACE_API_KEYS` como mínimo) en la pestaña Environment de Dokploy.
+3. Si otra app necesita pegarle por dominio público, configurar el dominio en Dokploy con **Container Port = 8000** (o el valor de `PORT` que uses). Si solo lo va a consumir otro contenedor dentro del mismo Dokploy, ni hace falta dominio: alcanza con la red interna que Dokploy arma entre los servicios del mismo proyecto.
+
+## 13. Nota sobre CliniQ
 
 Este servicio se diseñó para ser contract-compatible en espíritu con el `face-service` interno de CliniQ (mismo stack: FastAPI + InsightFace), pensando en que CliniQ pueda migrar a este servicio más adelante. Este repositorio no tiene ninguna dependencia de CliniQ ni código específico de esa app — cualquier trabajo de adaptación (por ejemplo, un cliente HTTP del lado de CliniQ) se hace en el repo de CliniQ, no acá.
