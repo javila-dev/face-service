@@ -1,0 +1,77 @@
+import base64
+import re
+
+import cv2
+import numpy as np
+from fastapi import Request, UploadFile
+
+from app.config import settings
+from app.core.errors import InvalidImageError
+from app.schemas.common import IssueCode
+
+_DATA_URL_RE = re.compile(r"^data:image/[a-zA-Z0-9.+-]+;base64,(.*)$", re.DOTALL)
+
+
+def _check_size(raw: bytes) -> None:
+    if len(raw) == 0:
+        raise InvalidImageError(IssueCode.INVALID_IMAGE, "La imagen enviada está vacía.")
+    max_bytes = int(settings.face_max_image_mb * 1024 * 1024)
+    if len(raw) > max_bytes:
+        raise InvalidImageError(
+            IssueCode.IMAGE_TOO_LARGE,
+            f"La imagen supera el límite de {settings.face_max_image_mb}MB.",
+        )
+
+
+async def bytes_from_upload(image: UploadFile) -> bytes:
+    raw = await image.read()
+    _check_size(raw)
+    return raw
+
+
+def bytes_from_base64_or_data_url(value: str) -> bytes:
+    if not value or not value.strip():
+        raise InvalidImageError(IssueCode.INVALID_IMAGE, "El campo 'image' está vacío.")
+    match = _DATA_URL_RE.match(value.strip())
+    b64_payload = match.group(1) if match else value.strip()
+    try:
+        raw = base64.b64decode(b64_payload, validate=True)
+    except Exception as exc:
+        raise InvalidImageError(IssueCode.INVALID_IMAGE, "El campo 'image' no es base64 válido.") from exc
+    _check_size(raw)
+    return raw
+
+
+def decode_from_bytes(raw: bytes) -> np.ndarray:
+    buf = np.frombuffer(raw, dtype=np.uint8)
+    img = cv2.imdecode(buf, cv2.IMREAD_COLOR)
+    if img is None:
+        raise InvalidImageError(
+            IssueCode.INVALID_IMAGE,
+            "No se pudo decodificar la imagen. Verifique que el archivo no esté dañado.",
+        )
+    return img
+
+
+async def extract_image_bytes(request: Request, field_name: str = "image") -> bytes:
+    """Funnel único: acepta multipart/form-data o JSON con base64/data-URL y devuelve bytes crudos."""
+    content_type = request.headers.get("content-type", "")
+
+    if content_type.startswith("multipart/form-data"):
+        form = await request.form()
+        upload = form.get(field_name)
+        if upload is None or not hasattr(upload, "read"):
+            raise InvalidImageError(
+                IssueCode.INVALID_IMAGE, f"Falta el campo '{field_name}' en el form-data."
+            )
+        return await bytes_from_upload(upload)
+
+    try:
+        body = await request.json()
+    except Exception as exc:
+        raise InvalidImageError(IssueCode.INVALID_IMAGE, "El body no es JSON válido.") from exc
+
+    image_value = body.get(field_name) if isinstance(body, dict) else None
+    if not image_value:
+        raise InvalidImageError(IssueCode.INVALID_IMAGE, f"Falta el campo '{field_name}' en el body JSON.")
+    return bytes_from_base64_or_data_url(image_value)
