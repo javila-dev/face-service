@@ -102,7 +102,11 @@ Si la foto en vivo no pasa calidad (incluye más de un rostro detectado), `ok: f
 
 ## 4. Authentication
 
-Header `X-API-Key: <key>` o `Authorization: Bearer <key>`. Las keys válidas se configuran en `FACE_API_KEYS` (separadas por coma) — una por app cliente, así cada una es revocable individualmente sin afectar a las demás. No hay endpoint de rotación: rotar una key es redeployar con el env var actualizado.
+Header `X-API-Key: <key>` o `Authorization: Bearer <key>`. Las keys válidas se configuran en `FACE_API_KEYS`.
+
+Por ahora se usa **una sola key compartida** entre todas las apps clientes (simplemente no pongas coma en `FACE_API_KEYS`). El servicio también soporta varias keys separadas por coma si más adelante hace falta una por app (por ejemplo, para poder revocar el acceso de una app sin afectar a las demás) — no hace falta cambiar código para eso, solo cargar más de un valor en la env var.
+
+No hay endpoint de rotación: rotar la key es redeployar con el env var actualizado.
 
 Sin key válida → HTTP 401. `/health` es la única excepción, queda público.
 
