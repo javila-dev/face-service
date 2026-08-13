@@ -12,6 +12,12 @@ No hace 1:N ("quién de todos es esta persona"), no tiene UI, y no incluye anti-
 
 Cada app cliente decide dónde guardar el embedding devuelto por `/v1/enroll` — este servicio no lo persiste.
 
+### Entorno de producción
+
+- **Base URL:** `https://face.2asoft.tech`
+- **Auth:** header `X-API-Key`, una key compartida por todas las apps clientes. La key real **no está en este repo** — pedísela a quien administra el deploy en Dokploy.
+- Probá primero `GET https://face.2asoft.tech/health` (sin auth) para confirmar que el servicio está arriba antes de integrar `/v1/enroll` / `/v1/match`.
+
 ## 2. Quick start
 
 Con `docker compose` (recomendado para desarrollo local):
