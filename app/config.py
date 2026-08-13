@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     face_match_threshold: float = 0.40
     face_min_det_score: float = 0.50
     face_min_face_ratio: float = 5.0
-    face_min_laplacian_var: float = 100.0
+    face_min_laplacian_var: float = 50.0
     face_min_brightness: float = 40.0
     face_max_brightness: float = 220.0
 

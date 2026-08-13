@@ -107,7 +107,7 @@ Sin key válida → HTTP 401. `/health` es la única excepción, queda público.
 | `FACE_MATCH_THRESHOLD` | `0.40` | Umbral de match por defecto (si la request no manda uno). |
 | `FACE_MIN_DET_SCORE` | `0.50` | Confianza mínima de detección de rostro. |
 | `FACE_MIN_FACE_RATIO` | `5.0` | % mínimo del frame que debe ocupar el rostro. |
-| `FACE_MIN_LAPLACIAN_VAR` | `100.0` | Piso de nitidez (varianza del laplaciano). Requiere calibración empírica por cámara. |
+| `FACE_MIN_LAPLACIAN_VAR` | `50.0` | Piso de nitidez (varianza del laplaciano). Calibrado con fotos reales: crops nítidos dan ~250-275, desenfoque apenas visible ~65, desenfoque notorio ~34. 50 deja margen amplio contra fotos nítidas y sigue filtrando desenfoque real. Puede necesitar ajuste por cámara. |
 | `FACE_MIN_BRIGHTNESS` / `FACE_MAX_BRIGHTNESS` | `40.0` / `220.0` | Rango de brillo aceptable (0-255, escala de grises). |
 | `FACE_MAX_IMAGE_MB` | `10.0` | Tamaño máximo de imagen aceptado. |
 | `FACE_MIN_RESOLUTION` | `200` | Resolución mínima (px, en cualquier eje). |
