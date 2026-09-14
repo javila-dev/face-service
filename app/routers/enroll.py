@@ -1,6 +1,7 @@
 from typing import Optional, Tuple
 
 from fastapi import APIRouter, Depends, Request
+from starlette.concurrency import run_in_threadpool
 
 from app.core.errors import InvalidImageError
 from app.deps.auth import require_api_key
@@ -27,7 +28,7 @@ async def enroll(request: Request, _api_key: str = Depends(require_api_key)) -> 
     img = image_input.decode_from_bytes(raw)
 
     analyzer = model_registry.get_analyzer()
-    faces = analyzer.get(img)
+    faces = await run_in_threadpool(analyzer.get, img)
     result = quality.analyze(img, faces, max_yaw=max_yaw, max_pitch=max_pitch, max_roll=max_roll)
 
     if not result.ok:

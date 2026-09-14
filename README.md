@@ -152,6 +152,7 @@ Sin key válida → HTTP 401. `/health` es la única excepción, queda público.
 | `FACE_MAX_PITCH` | *(sin chequear)* | Límite de pitch (inclinación vertical) en grados. `None` = no se evalúa salvo que el request lo pida. |
 | `FACE_MAX_ROLL` | *(sin chequear)* | Límite de roll (inclinación lateral) en grados. `None` = no se evalúa salvo que el request lo pida. |
 | `PORT` | `8000` | Puerto del servidor. |
+| `UVICORN_WORKERS` | `1` (Dockerfile) / `2` (docker-compose) | Cantidad de procesos worker de uvicorn. Ver [Concurrencia](#10-concurrencia). |
 | `APP_VERSION` | `1.1.0` | Se refleja en `/health`. |
 
 Todos los umbrales de calidad son ajustables sin tocar código — cada app cliente/cámara puede necesitar valores distintos.
@@ -186,7 +187,18 @@ docker build --build-arg FACE_MODEL_NAME=buffalo_s -t face-recognition-service:b
 
 `FACE_MATCH_THRESHOLD` y los umbrales de calidad son puntos de partida razonables, no constantes universales. La similitud coseno depende de la cámara, iluminación y ángulo típico de cada app cliente — calibrá empíricamente con fotos reales antes de llevar a producción.
 
-## 10. Issue code reference
+## 10. Concurrencia
+
+La inferencia (`analyzer.get`) es CPU-bound y corre vía ONNX Runtime, que no libera el GIL de forma cooperativa con asyncio. Para que el event loop no se bloquee mientras hay una inferencia en curso (y así el proceso pueda seguir aceptando conexiones y respondiendo `/health`), los endpoints la ejecutan con `run_in_threadpool`. Esto **no** paraleliza la inferencia en sí — ONNX Runtime sigue usando CPU de forma serializada dentro de ese proceso — pero evita que una request lenta cuelgue a las demás mientras esperan su turno.
+
+Para paralelismo real entre requests concurrentes hace falta más de un proceso:
+
+- **`UVICORN_WORKERS`** (Dockerfile/docker-compose): cada worker es un proceso separado que carga su propia copia del modelo. Con `buffalo_l` (~2-3GB de RAM por proceso), 2 workers necesitan ~4-6GB además de resto del contenedor — por eso `docker-compose.yml` sube `mem_limit` a `7g` y `cpus` a `4.0` cuando `UVICORN_WORKERS=2`. Si tu host tiene menos RAM, bajá `UVICORN_WORKERS` a `1` (o usá `buffalo_s`).
+- **Réplicas en Dokploy** (alternativa a `UVICORN_WORKERS`): en vez de varios workers en un mismo contenedor, correr 2 réplicas del servicio. Mismo costo de RAM total (~2-3GB × réplica), pero con el balanceo/aislamiento que da la plataforma en vez de uvicorn.
+
+Elegí una de las dos vías, no las combines sin recalcular RAM: `UVICORN_WORKERS=2` con 2 réplicas ya son 4 copias del modelo cargadas.
+
+## 11. Issue code reference
 
 | Código | Cuándo aparece |
 |---|---|
@@ -211,7 +223,7 @@ docker build --build-arg FACE_MODEL_NAME=buffalo_s -t face-recognition-service:b
 | Foto buena + misma persona | `ok: true`, `match_passed: true`. |
 | Foto buena + persona distinta | `ok: true`, `match_passed: false` — la calidad estuvo bien, la señal de fallo es `match_passed: false`, **no** un issue nuevo (no existe un código `identity_mismatch`, es intencional). |
 
-## 11. Testing
+## 12. Testing
 
 ```bash
 pip install -r requirements-dev.txt
@@ -220,7 +232,7 @@ pytest
 
 Todos los tests (unitarios e integración) corren con el modelo de InsightFace **mockeado** — no descargan ni cargan el modelo real, corren en segundos. Para un smoke test end-to-end con el modelo real, hay que levantar el contenedor y pegarle a `/v1/enroll` / `/v1/match` con fotos reales (no forma parte de la suite automática por el costo de cargar el modelo).
 
-## 12. Deploy en Dokploy
+## 13. Deploy en Dokploy
 
 `docker-compose.yml` no tiene nada de Traefik ni de redes/labels — eso lo resuelve Dokploy solo:
 
@@ -228,6 +240,6 @@ Todos los tests (unitarios e integración) corren con el modelo de InsightFace *
 2. Cargar las env vars (`FACE_API_KEYS` como mínimo) en la pestaña Environment de Dokploy.
 3. Si otra app necesita pegarle por dominio público, configurar el dominio en Dokploy con **Container Port = 8000** (o el valor de `PORT` que uses). Si solo lo va a consumir otro contenedor dentro del mismo Dokploy, ni hace falta dominio: alcanza con la red interna que Dokploy arma entre los servicios del mismo proyecto.
 
-## 13. Nota sobre CliniQ
+## 14. Nota sobre CliniQ
 
 Este servicio se diseñó para ser contract-compatible en espíritu con el `face-service` interno de CliniQ (mismo stack: FastAPI + InsightFace), pensando en que CliniQ pueda migrar a este servicio más adelante. Este repositorio no tiene ninguna dependencia de CliniQ ni código específico de esa app — cualquier trabajo de adaptación (por ejemplo, un cliente HTTP del lado de CliniQ) se hace en el repo de CliniQ, no acá.

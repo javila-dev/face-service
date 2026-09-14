@@ -19,10 +19,13 @@ services:
       FACE_MAX_IMAGE_MB: ${FACE_MAX_IMAGE_MB:-10.0}
       FACE_MIN_RESOLUTION: ${FACE_MIN_RESOLUTION:-200}
       PORT: ${PORT:-8000}
+      # Cada worker de uvicorn es un proceso separado que carga su propia copia
+      # del modelo (~2-3GB de RAM c/u). Si subís este valor, subí mem_limit acorde.
+      UVICORN_WORKERS: ${UVICORN_WORKERS:-2}
     ports:
       - "${PORT:-8000}:8000"
-    mem_limit: 3g
-    cpus: "2.0"
+    mem_limit: 7g
+    cpus: "4.0"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request as r; r.urlopen('http://localhost:8000/health').status"]
       interval: 30s
