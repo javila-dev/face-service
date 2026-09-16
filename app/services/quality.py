@@ -46,14 +46,27 @@ def analyze(
     max_yaw: Optional[float] = None,
     max_pitch: Optional[float] = None,
     max_roll: Optional[float] = None,
+    min_det_score: Optional[float] = None,
+    min_face_ratio: Optional[float] = None,
+    min_laplacian_var: Optional[float] = None,
+    min_brightness: Optional[float] = None,
+    max_brightness: Optional[float] = None,
+    min_resolution: Optional[int] = None,
 ) -> QualityResult:
+    eff_min_det_score = min_det_score if min_det_score is not None else settings.face_min_det_score
+    eff_min_face_ratio = min_face_ratio if min_face_ratio is not None else settings.face_min_face_ratio
+    eff_min_laplacian_var = min_laplacian_var if min_laplacian_var is not None else settings.face_min_laplacian_var
+    eff_min_brightness = min_brightness if min_brightness is not None else settings.face_min_brightness
+    eff_max_brightness = max_brightness if max_brightness is not None else settings.face_max_brightness
+    eff_min_resolution = min_resolution if min_resolution is not None else settings.face_min_resolution
+
     h, w = img.shape[:2]
 
-    if min(h, w) < settings.face_min_resolution:
+    if min(h, w) < eff_min_resolution:
         return _empty_result([make_issue(
             IssueCode.LOW_RESOLUTION,
             f"La imagen es demasiado pequeña ({w}x{h}px). Se requiere mínimo "
-            f"{settings.face_min_resolution}x{settings.face_min_resolution}px.",
+            f"{eff_min_resolution}x{eff_min_resolution}px.",
         )])
 
     if len(faces) == 0:
@@ -79,15 +92,15 @@ def analyze(
     brightness = float(gray.mean())
 
     issues: List[Issue] = []
-    if det_score < settings.face_min_det_score:
+    if det_score < eff_min_det_score:
         issues.append(make_issue(IssueCode.LOW_CONFIDENCE))
-    if face_ratio < settings.face_min_face_ratio:
+    if face_ratio < eff_min_face_ratio:
         issues.append(make_issue(IssueCode.FACE_TOO_SMALL))
-    if laplacian_var < settings.face_min_laplacian_var:
+    if laplacian_var < eff_min_laplacian_var:
         issues.append(make_issue(IssueCode.BLURRY))
-    if brightness < settings.face_min_brightness:
+    if brightness < eff_min_brightness:
         issues.append(make_issue(IssueCode.TOO_DARK))
-    elif brightness > settings.face_max_brightness:
+    elif brightness > eff_max_brightness:
         issues.append(make_issue(IssueCode.TOO_BRIGHT))
 
     eff_max_yaw = max_yaw if max_yaw is not None else settings.face_max_yaw

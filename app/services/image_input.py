@@ -77,3 +77,24 @@ def parse_optional_float(
     if le is not None and parsed > le:
         raise HTTPException(status_code=422, detail=f"El campo '{field_name}' debe ser <= {le}.")
     return parsed
+
+
+def parse_optional_int(
+    value,
+    field_name: str,
+    *,
+    ge: Optional[int] = None,
+    le: Optional[int] = None,
+) -> Optional[int]:
+    """Versión entera de parse_optional_float, para campos como min_resolution en multipart."""
+    if value in (None, ""):
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail=f"El campo '{field_name}' debe ser un entero.")
+    if ge is not None and parsed < ge:
+        raise HTTPException(status_code=422, detail=f"El campo '{field_name}' debe ser >= {ge}.")
+    if le is not None and parsed > le:
+        raise HTTPException(status_code=422, detail=f"El campo '{field_name}' debe ser <= {le}.")
+    return parsed

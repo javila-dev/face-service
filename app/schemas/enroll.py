@@ -16,6 +16,24 @@ class EnrollImageInput(BaseModel):
     max_roll: Optional[float] = Field(
         None, ge=0, le=90, description="Límite de roll (inclinación lateral) en grados para esta request."
     )
+    min_det_score: Optional[float] = Field(
+        None, ge=0, le=1, description="Confianza mínima de detección para esta request. Si se omite se usa FACE_MIN_DET_SCORE."
+    )
+    min_face_ratio: Optional[float] = Field(
+        None, ge=0, le=100, description="Porcentaje mínimo del frame que debe ocupar el rostro. Si se omite se usa FACE_MIN_FACE_RATIO."
+    )
+    min_laplacian_var: Optional[float] = Field(
+        None, ge=0, description="Varianza mínima del laplaciano (nitidez) para esta request. Si se omite se usa FACE_MIN_LAPLACIAN_VAR."
+    )
+    min_brightness: Optional[float] = Field(
+        None, ge=0, le=255, description="Brillo mínimo aceptado para esta request. Si se omite se usa FACE_MIN_BRIGHTNESS."
+    )
+    max_brightness: Optional[float] = Field(
+        None, ge=0, le=255, description="Brillo máximo aceptado para esta request. Si se omite se usa FACE_MAX_BRIGHTNESS."
+    )
+    min_resolution: Optional[int] = Field(
+        None, ge=1, description="Resolución mínima (lado más chico, en px) para esta request. Si se omite se usa FACE_MIN_RESOLUTION."
+    )
 
 
 class EnrollResponse(BaseModel):

@@ -133,3 +133,63 @@ def test_enroll_max_yaw_out_of_range_json_422(client, fake_analyzer):
         json={"image": encoded, "max_yaw": 999},
     )
     assert resp.status_code == 422
+
+
+def test_enroll_multipart_min_det_score_override_blocks(client, fake_analyzer, make_face):
+    fake_analyzer.next_faces = [make_face([50, 50, 350, 350], det_score=0.7)]
+    resp = client.post(
+        "/v1/enroll",
+        headers={"X-API-Key": "test-key"},
+        files={"image": ("photo.jpg", _jpeg_bytes(), "image/jpeg")},
+        data={"min_det_score": "0.9"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is False
+    assert body["issues"][0]["code"] == "low_confidence"
+
+
+def test_enroll_json_min_det_score_override_blocks(client, fake_analyzer, make_face):
+    fake_analyzer.next_faces = [make_face([50, 50, 350, 350], det_score=0.7)]
+    encoded = base64.b64encode(_jpeg_bytes()).decode("ascii")
+    resp = client.post(
+        "/v1/enroll",
+        headers={"X-API-Key": "test-key"},
+        json={"image": encoded, "min_det_score": 0.9},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is False
+    assert body["issues"][0]["code"] == "low_confidence"
+
+
+def test_enroll_default_does_not_block_on_moderate_det_score(client, fake_analyzer, make_face):
+    # sin min_det_score en el request, sigue siendo el default de FACE_MIN_DET_SCORE (0.50)
+    fake_analyzer.next_faces = [make_face([50, 50, 350, 350], det_score=0.7)]
+    resp = client.post(
+        "/v1/enroll",
+        headers={"X-API-Key": "test-key"},
+        files={"image": ("photo.jpg", _jpeg_bytes(), "image/jpeg")},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is True
+
+
+def test_enroll_min_det_score_out_of_range_json_422(client, fake_analyzer):
+    encoded = base64.b64encode(_jpeg_bytes()).decode("ascii")
+    resp = client.post(
+        "/v1/enroll",
+        headers={"X-API-Key": "test-key"},
+        json={"image": encoded, "min_det_score": 2.0},
+    )
+    assert resp.status_code == 422
+
+
+def test_enroll_min_resolution_out_of_range_multipart_422(client, fake_analyzer):
+    resp = client.post(
+        "/v1/enroll",
+        headers={"X-API-Key": "test-key"},
+        files={"image": ("photo.jpg", _jpeg_bytes(), "image/jpeg")},
+        data={"min_resolution": "0"},
+    )
+    assert resp.status_code == 422

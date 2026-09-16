@@ -68,7 +68,9 @@ Sin autenticación (para liveness/readiness checks de infraestructura).
 
 ### `POST /v1/enroll`
 
-Requiere `X-API-Key`. Body: `multipart/form-data` con campo `image` (+ `max_yaw`/`max_pitch`/`max_roll` opcionales), **o** JSON `{"image": "<base64 o data-URL>", "max_yaw": ..., "max_pitch": ..., "max_roll": ...}`.
+Requiere `X-API-Key`. Body: `multipart/form-data` con campo `image` (+ `max_yaw`/`max_pitch`/`max_roll` y los umbrales de calidad `min_det_score`/`min_face_ratio`/`min_laplacian_var`/`min_brightness`/`max_brightness`/`min_resolution`, todos opcionales), **o** el JSON equivalente `{"image": "<base64 o data-URL>", "max_yaw": ..., ...}`.
+
+Cualquier umbral de calidad que no mandes toma el valor configurado por variable de entorno (ver [Environment variables](#5-environment-variables)) — son overrides **por request**, no cambian la configuración compartida del servicio. Útil cuando distintas apps clientes necesitan exigencias de calidad distintas para el enrolamiento sin desplegar instancias separadas.
 
 Respuesta (siempre HTTP 200 salvo imagen realmente inválida/ilegible → 400):
 
